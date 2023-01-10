@@ -34,6 +34,46 @@ class RequestBodyValidator(Serializer):
         raise NotImplementedError
 
 
+class MFAMethodBackupCodesGenerationValidator(RequestBodyValidator):
+    code = CharField(
+        required=trench_settings.CONFIRM_BACKUP_CODES_REGENERATION_WITH_CODE
+    )
+
+    @staticmethod
+    def _get_validation_method_name() -> str:
+        return "validate_code"
+
+    def __init__(self, user: User, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._user = user
+
+    def validate_code(self, value: str) -> str:
+        if not value:
+            raise OTPCodeMissingError()
+
+        mfa_backup_code_model = get_mfa_backup_code_model()
+
+        mfa_backup_code = mfa_backup_code_model.objects.filter(user_id=self._user.id).first()
+
+        validated_backup_code = False
+        if mfa_backup_code:
+            validated_backup_code = validate_backup_code_command(
+                value=value, backup_codes=mfa_backup_code.values
+            )
+
+        if mfa_backup_code and validated_backup_code:
+            remove_backup_code_command(
+                user_id=self._user.id, code=value
+            )
+            return value
+
+        for auth_method in get_mfa_model().objects.list_active(user_id=self._user.id):
+            if get_mfa_handler(mfa_method=auth_method).validate_code(code=value):
+                return value
+
+        raise CodeInvalidOrExpiredError()
+
+
 class ProtectedActionValidator(RequestBodyValidator):
     code = CharField()
 
@@ -100,17 +140,6 @@ class MFAMethodActivationConfirmationValidator(ProtectedActionValidator):
     def _validate_mfa_method(mfa: MFAMethod) -> None:
         if mfa.is_active:
             raise MFAMethodAlreadyActiveError()
-
-
-class MFAMethodBackupCodesGenerationValidator(ProtectedActionValidator):
-    code = CharField(
-        required=trench_settings.CONFIRM_BACKUP_CODES_REGENERATION_WITH_CODE
-    )
-
-    @staticmethod
-    def _validate_mfa_method(mfa: MFAMethod) -> None:
-        if not mfa.is_active:
-            raise MFANotEnabledError()
 
 
 class MFAMethodCodeSerializer(RequestBodyValidator):

@@ -700,7 +700,7 @@ def test_backup_codes_regeneration(active_user_with_encrypted_backup_codes):
     old_backup_codes = active_user.mfa_backup_codes.values
 
     response = client.post(
-        path="/auth/email/codes/regenerate/",
+        path="/auth/codes/regenerate/",
         data={
             "code": handler.create_code(),
         },
@@ -720,7 +720,7 @@ def test_backup_codes_regeneration_without_otp(active_user_with_encrypted_backup
     client = TrenchAPIClient()
     mfa_method = active_user.mfa_methods.first()
     client.authenticate_multi_factor(mfa_method=mfa_method, user=active_user)
-    response = client.post(path="/auth/email/codes/regenerate/", format="json")
+    response = client.post(path="/auth/codes/regenerate/", format="json")
     assert response.data.get("code")[0].code == "required"
     assert response.status_code == HTTP_400_BAD_REQUEST
 
@@ -732,19 +732,18 @@ def test_backup_codes_regeneration_disabled_method(
 ):
     active_user, _ = active_user_with_many_otp_methods
     client = TrenchAPIClient()
-    primary_method = active_user.mfa_methods.filter(is_primary=True).first()
+    primary_method = active_user.mfa_methods.filter(name="sms_twilio").first()
     handler = get_mfa_handler(mfa_method=primary_method)
     client.authenticate_multi_factor(mfa_method=primary_method, user=active_user)
 
     active_user.mfa_methods.filter(name="sms_twilio").update(is_active=False)
 
     response = client.post(
-        path="/auth/sms_twilio/codes/regenerate/",
+        path="/auth/codes/regenerate/",
         data={"code": handler.create_code()},
         format="json",
     )
     assert response.status_code == HTTP_400_BAD_REQUEST
-    assert response.data.get("code")[0].code == "not_enabled"
 
     # revert changes
     active_user.mfa_methods.filter(name="sms_twilio").update(is_active=True)
