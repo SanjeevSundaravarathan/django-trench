@@ -6,6 +6,7 @@ from django.db.models import (
     CharField,
     CheckConstraint,
     ForeignKey,
+    OneToOneField,
     Manager,
     Model,
     Q,
@@ -85,7 +86,7 @@ class MFAUsedCode(Model):
 
 class MFABackupCodes(Model):
     _BACKUP_CODES_DELIMITER = "|"
-    user = ForeignKey(
+    user = OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=CASCADE,
         verbose_name=_("user"),

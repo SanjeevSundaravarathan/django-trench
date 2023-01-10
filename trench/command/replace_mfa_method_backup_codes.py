@@ -18,7 +18,7 @@ class RegenerateBackupCodesForMFAMethodCommand:
         codes_generator: Callable,
     ) -> None:
         self._requires_encryption = requires_encryption
-        self.mfa_backup_code_model = mfa_backup_code_model
+        self._mfa_backup_code_model = mfa_backup_code_model
         self._code_hasher = code_hasher
         self._codes_generator = codes_generator
 
@@ -29,13 +29,13 @@ class RegenerateBackupCodesForMFAMethodCommand:
             if self._requires_encryption
             else backup_codes
         )
-        if not self.mfa_backup_code_model.objects.filter(user_id=user_id):
-            self.mfa_backup_code_model.objects.create(
+        if not self._mfa_backup_code_model.objects.filter(user_id=user_id):
+            self._mfa_backup_code_model.objects.create(
                 user_id=user_id,
                 _values=_backup_codes
             )
         else:
-            rows_affected = self.mfa_backup_code_model.objects.filter(
+            rows_affected = self._mfa_backup_code_model.objects.filter(
                 user_id=user_id
             ).update(
                 _values=_backup_codes

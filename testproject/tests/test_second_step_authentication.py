@@ -182,7 +182,8 @@ def test_use_backup_code(active_user_with_encrypted_backup_codes):
     )
     assert response_second_step.status_code == HTTP_200_OK
 
-    backup_codes = active_user.mfa_backup_codes.first()
+    active_user.refresh_from_db()
+    backup_codes = active_user.mfa_backup_codes
     assert len(backup_codes.values) == 7
 
 
@@ -266,7 +267,6 @@ def test_reuse_same_code_after_validity_period(active_user, settings):
     )
     assert response.status_code == HTTP_200_OK
 
-    code = handler.create_code()
     mfa_reuse_code = MFAUsedCode.objects.filter(code=code, user=active_user).first()
     mfa_reuse_code.expires_at = timezone.now() - timezone.timedelta(seconds=120)
     mfa_reuse_code.save()
@@ -307,8 +307,6 @@ def test_fail_to_reuse_same_code(active_user, settings):
     )
     assert response.status_code == HTTP_200_OK
 
-    code = handler.create_code()
-
     response = client.post(
         path="/auth/email/deactivate/",
         data={"code": code},
@@ -342,8 +340,6 @@ def test_reuse_same_code_and_fail_to_reuse_same_code_whend_allow_reuse_code_is_f
     )
     assert response.status_code == HTTP_200_OK
 
-    code = handler.create_code()
-
     response = client.post(
         path="/auth/email/deactivate/",
         data={"code": code},
@@ -353,9 +349,6 @@ def test_reuse_same_code_and_fail_to_reuse_same_code_whend_allow_reuse_code_is_f
     assert response.status_code == HTTP_204_NO_CONTENT
 
     settings.TRENCH_AUTH["ALLOW_REUSE_CODE"] = False
-
-    # activate the newly created MFA method
-    code = handler.create_code()
 
     response = client.post(
         path="/auth/email/activate/confirm/",
@@ -390,8 +383,6 @@ def test_reuse_same_code_when_allow_reuse_true(active_user):
         format="json",
     )
     assert response.status_code == HTTP_200_OK
-
-    code = handler.create_code()
 
     response = client.post(
         path="/auth/email/deactivate/",
@@ -706,7 +697,7 @@ def test_backup_codes_regeneration(active_user_with_encrypted_backup_codes):
     handler = get_mfa_handler(mfa_method=mfa_method)
     client.authenticate_multi_factor(mfa_method=mfa_method, user=active_user)
 
-    old_backup_codes = active_user.mfa_backup_codes.first().values
+    old_backup_codes = active_user.mfa_backup_codes.values
 
     response = client.post(
         path="/auth/email/codes/regenerate/",
@@ -715,7 +706,9 @@ def test_backup_codes_regeneration(active_user_with_encrypted_backup_codes):
         },
         format="json",
     )
-    new_backup_codes = active_user.mfa_backup_codes.first().values
+
+    active_user.refresh_from_db()
+    new_backup_codes = active_user.mfa_backup_codes.values
     assert response.status_code == HTTP_200_OK
     assert old_backup_codes != new_backup_codes
 
