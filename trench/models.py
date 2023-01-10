@@ -1,23 +1,27 @@
 from django.conf import settings
 from django.db.models import (
     CASCADE,
+    IntegerField,
     BooleanField,
     CharField,
     CheckConstraint,
     ForeignKey,
+    OneToOneField,
     Manager,
     Model,
     Q,
     QuerySet,
     TextField,
     UniqueConstraint,
+    DateTimeField
 )
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-
+from datetime import datetime
 from typing import Any, Iterable
 
 from trench.exceptions import MFAMethodDoesNotExistError
-
+import uuid
 
 class MFAUserMethodManager(Manager):
     def get_by_name(self, user_id: Any, name: str) -> "MFAMethod":
@@ -59,9 +63,52 @@ class MFAUserMethodManager(Manager):
         return self.filter(user_id=user_id, is_primary=True).exists()
 
 
-class MFAMethod(Model):
-    _BACKUP_CODES_DELIMITER = "|"
+class MFAUsedCode(Model):
+    id = CharField(_("id"), max_length=255, default=uuid.uuid4, primary_key=True)
+    user = ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=CASCADE,
+        verbose_name=_("user"),
+        related_name="mfa_used_codes",
+    )
+    code = CharField(_("code"), max_length=6)
+    used_at = DateTimeField(_("used_at"), auto_now_add=True)
+    expires_at = DateTimeField(_("expires_at"))
+    method = CharField(_("method"), max_length=255)
 
+    class Meta:
+        verbose_name = _("MFA Last Used Code")
+        verbose_name_plural = _("MFA Last Used Codes")
+
+    def __str__(self) -> str:
+        return f"{self.id} (User id: {self.user_id})"
+
+
+class MFABackupCodes(Model):
+    _BACKUP_CODES_DELIMITER = "|"
+    user = OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=CASCADE,
+        verbose_name=_("user"),
+        related_name="mfa_backup_codes",
+        primary_key=True
+    )
+    _values = TextField(_("backup codes"))
+
+    class Meta:
+        verbose_name = _("MFA Backup Code")
+        verbose_name_plural = _("MFA Backup Codes")
+
+    @property
+    def values(self) -> Iterable[str]:
+        return self._values.split(self._BACKUP_CODES_DELIMITER)
+
+    @values.setter
+    def values(self, codes: Iterable) -> None:
+        self._values = self._BACKUP_CODES_DELIMITER.join(codes)
+
+
+class MFAMethod(Model):
     user = ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=CASCADE,
@@ -72,7 +119,6 @@ class MFAMethod(Model):
     secret = CharField(_("secret"), max_length=255)
     is_primary = BooleanField(_("is primary"), default=False)
     is_active = BooleanField(_("is active"), default=False)
-    _backup_codes = TextField(_("backup codes"), blank=True)
 
     class Meta:
         verbose_name = _("MFA Method")
@@ -93,11 +139,3 @@ class MFAMethod(Model):
 
     def __str__(self) -> str:
         return f"{self.name} (User id: {self.user_id})"
-
-    @property
-    def backup_codes(self) -> Iterable[str]:
-        return self._backup_codes.split(self._BACKUP_CODES_DELIMITER)
-
-    @backup_codes.setter
-    def backup_codes(self, codes: Iterable) -> None:
-        self._backup_codes = self._BACKUP_CODES_DELIMITER.join(codes)

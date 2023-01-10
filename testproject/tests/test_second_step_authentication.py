@@ -9,6 +9,7 @@ from rest_framework.status import (
     HTTP_400_BAD_REQUEST,
     HTTP_401_UNAUTHORIZED,
 )
+from django.utils import timezone
 from rest_framework.test import APIClient
 from time import sleep
 from twilio.base.exceptions import TwilioException, TwilioRestException
@@ -19,8 +20,7 @@ from trench.command.replace_mfa_method_backup_codes import (
     regenerate_backup_codes_for_mfa_method_command,
 )
 from trench.exceptions import MFAMethodDoesNotExistError
-from trench.models import MFAMethod
-
+from trench.models import MFAMethod, MFAUsedCode
 
 User = get_user_model()
 
@@ -182,8 +182,9 @@ def test_use_backup_code(active_user_with_encrypted_backup_codes):
     )
     assert response_second_step.status_code == HTTP_200_OK
 
-    mfa_method = active_user.mfa_methods.first()
-    assert len(mfa_method.backup_codes) == 7
+    active_user.refresh_from_db()
+    backup_codes = active_user.mfa_backup_codes
+    assert len(backup_codes.values) == 7
 
 
 @pytest.mark.django_db
@@ -239,6 +240,157 @@ def test_confirm_activation_otp(active_user):
     assert len(response.data.get("backup_codes")) == 8
     mfa_method.delete()
     assert active_user.mfa_methods.count() == 0
+
+
+@pytest.mark.django_db
+def test_reuse_same_code_after_validity_period(active_user, settings):
+    settings.TRENCH_AUTH["ALLOW_REUSE_CODE"] = False
+
+    client = TrenchAPIClient()
+    client.authenticate(user=active_user)
+
+    # create new MFA method
+    client.post(
+        path="/auth/email/activate/",
+        format="json",
+    )
+    mfa_method = active_user.mfa_methods.first()
+    handler = get_mfa_handler(mfa_method=mfa_method)
+
+    # activate the newly created MFA method
+    code = handler.create_code()
+
+    response = client.post(
+        path="/auth/email/activate/confirm/",
+        data={"code": code},
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+    mfa_reuse_code = MFAUsedCode.objects.filter(code=code, user=active_user).first()
+    mfa_reuse_code.expires_at = timezone.now() - timezone.timedelta(seconds=120)
+    mfa_reuse_code.save()
+    mfa_reuse_code.refresh_from_db()
+
+    response = client.post(
+        path="/auth/email/deactivate/",
+        data={"code": code},
+        format="json",
+    )
+
+    assert response.status_code == HTTP_204_NO_CONTENT
+    settings.TRENCH_AUTH["ALLOW_REUSE_CODE"] = True
+
+
+@pytest.mark.django_db
+def test_fail_to_reuse_same_code(active_user, settings):
+    settings.TRENCH_AUTH["ALLOW_REUSE_CODE"] = False
+
+    client = TrenchAPIClient()
+    client.authenticate(user=active_user)
+
+    # create new MFA method
+    client.post(
+        path="/auth/email/activate/",
+        format="json",
+    )
+    mfa_method = active_user.mfa_methods.first()
+    handler = get_mfa_handler(mfa_method=mfa_method)
+
+    # activate the newly created MFA method
+    code = handler.create_code()
+
+    response = client.post(
+        path="/auth/email/activate/confirm/",
+        data={"code": code},
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+    response = client.post(
+        path="/auth/email/deactivate/",
+        data={"code": code},
+        format="json",
+    )
+
+    assert response.status_code == HTTP_400_BAD_REQUEST
+    settings.TRENCH_AUTH["ALLOW_REUSE_CODE"] = True
+
+
+@pytest.mark.django_db
+def test_reuse_same_code_and_fail_to_reuse_same_code_whend_allow_reuse_code_is_false(active_user, settings):
+    client = TrenchAPIClient()
+    client.authenticate(user=active_user)
+
+    # create new MFA method
+    client.post(
+        path="/auth/email/activate/",
+        format="json",
+    )
+    mfa_method = active_user.mfa_methods.first()
+    handler = get_mfa_handler(mfa_method=mfa_method)
+
+    # activate the newly created MFA method
+    code = handler.create_code()
+
+    response = client.post(
+        path="/auth/email/activate/confirm/",
+        data={"code": code},
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+    response = client.post(
+        path="/auth/email/deactivate/",
+        data={"code": code},
+        format="json",
+    )
+
+    assert response.status_code == HTTP_204_NO_CONTENT
+
+    settings.TRENCH_AUTH["ALLOW_REUSE_CODE"] = False
+
+    response = client.post(
+        path="/auth/email/activate/confirm/",
+        data={"code": code},
+        format="json",
+    )
+    assert response.status_code == HTTP_400_BAD_REQUEST
+
+    settings.TRENCH_AUTH["ALLOW_REUSE_CODE"] = True
+
+
+@flaky
+@pytest.mark.django_db
+def test_reuse_same_code_when_allow_reuse_true(active_user):
+    client = TrenchAPIClient()
+    client.authenticate(user=active_user)
+
+    # create new MFA method
+    client.post(
+        path="/auth/email/activate/",
+        format="json",
+    )
+    mfa_method = active_user.mfa_methods.first()
+    handler = get_mfa_handler(mfa_method=mfa_method)
+
+    # activate the newly created MFA method
+    code = handler.create_code()
+
+    response = client.post(
+        path="/auth/email/activate/confirm/",
+        data={"code": code},
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+    response = client.post(
+        path="/auth/email/deactivate/",
+        data={"code": code},
+        format="json",
+    )
+
+    assert response.status_code == HTTP_204_NO_CONTENT
 
 
 @flaky
@@ -470,7 +622,7 @@ def test_confirm_activation_otp_with_backup_code(
         pass
 
     backup_codes = regenerate_backup_codes_for_mfa_method_command(
-        user_id=active_user.id, name="sms_twilio"
+        user_id=active_user.id
     )
     response = client.post(
         path="/auth/sms_twilio/activate/confirm/",
@@ -478,7 +630,8 @@ def test_confirm_activation_otp_with_backup_code(
         format="json",
     )
     assert response.status_code == HTTP_200_OK
-    assert len(response.data.get("backup_codes")) == 8
+    # backup codes will be empty because only it will be created once
+    assert response.data.get("backup_codes") is None
 
     # revert changes
     active_user.mfa_methods.filter(name="sms_twilio").delete()
@@ -543,7 +696,9 @@ def test_backup_codes_regeneration(active_user_with_encrypted_backup_codes):
     mfa_method = active_user.mfa_methods.first()
     handler = get_mfa_handler(mfa_method=mfa_method)
     client.authenticate_multi_factor(mfa_method=mfa_method, user=active_user)
-    old_backup_codes = active_user.mfa_methods.first().backup_codes
+
+    old_backup_codes = active_user.mfa_backup_codes.values
+
     response = client.post(
         path="/auth/email/codes/regenerate/",
         data={
@@ -551,7 +706,9 @@ def test_backup_codes_regeneration(active_user_with_encrypted_backup_codes):
         },
         format="json",
     )
-    new_backup_codes = active_user.mfa_methods.first().backup_codes
+
+    active_user.refresh_from_db()
+    new_backup_codes = active_user.mfa_backup_codes.values
     assert response.status_code == HTTP_200_OK
     assert old_backup_codes != new_backup_codes
 
@@ -639,8 +796,7 @@ def test_confirm_yubikey_activation_with_backup_code(
         },
         format="json",
     )
-    assert response.status_code == HTTP_400_BAD_REQUEST
-    assert response.data.get("code") is not None
+    assert response.status_code == HTTP_200_OK
 
 
 @pytest.mark.django_db
