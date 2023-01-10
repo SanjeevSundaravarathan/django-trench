@@ -34,7 +34,7 @@ urlpatterns = (
         name="mfa-deactivate",
     ),
     path(
-        "<str:method>/codes/regenerate/",
+        "codes/regenerate/",
         MFAMethodBackupCodesRegenerationView.as_view(),
         name="mfa-regenerate-codes",
     ),

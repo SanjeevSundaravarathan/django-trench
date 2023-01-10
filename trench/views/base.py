@@ -168,11 +168,11 @@ class MFAMethodBackupCodesRegenerationView(APIView):
     permission_classes = (IsAuthenticated,)
 
     @staticmethod
-    def post(request: Request, method: str) -> Response:
+    def post(request: Request) -> Response:
         if not trench_settings.ALLOW_BACKUP_CODES_REGENERATION:
             return ErrorResponse(error=_("Backup codes regeneration is not allowed."))
         serializer = MFAMethodBackupCodesGenerationValidator(
-            mfa_method_name=method, user=request.user, data=request.data
+            user=request.user, data=request.data
         )
         if not serializer.is_valid():
             return Response(status=HTTP_400_BAD_REQUEST, data=serializer.errors)
@@ -180,6 +180,7 @@ class MFAMethodBackupCodesRegenerationView(APIView):
             backup_codes = regenerate_backup_codes_for_mfa_method_command(
                 user_id=request.user.id
             )
+
             return Response({"backup_codes": backup_codes})
         except MFAValidationError as cause:
             return ErrorResponse(error=cause)
