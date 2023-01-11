@@ -73,6 +73,7 @@ DEFAULTS = {
     "ENCRYPT_BACKUP_CODES": True,
     "APPLICATION_ISSUER_NAME": "MyApplication",
     "ALLOW_REUSE_CODE": True,
+    "CODE_RESEND_INTERVAL": 30,  # set 0 to disable it
     "MFA_METHODS": {
         "sms_twilio": {
             VERBOSE_NAME: _("sms_twilio"),
