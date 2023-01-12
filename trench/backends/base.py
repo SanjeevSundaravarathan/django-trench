@@ -5,7 +5,7 @@ from pyotp import TOTP
 from typing import Any, Dict, Optional, Tuple
 from django.utils import timezone
 from trench.command.create_otp import create_otp_command
-from trench.exceptions import MissingConfigurationError
+from trench.exceptions import MissingConfigurationError, CodeReuseError
 from trench.models import MFAMethod
 from trench.responses import DispatchResponse
 from trench.settings import SOURCE_FIELD, VALIDITY_PERIOD, ALLOW_REUSE_CODE, trench_settings
@@ -88,7 +88,7 @@ class AbstractMessageDispatcher(ABC):
 
         used_code_exists = mfa_used_code_model.objects.filter(user=user, code=code, method=method_name, expires_at__gt=now).exists()
         if used_code_exists and not self._get_allow_reuse_code():
-            return False
+            raise CodeReuseError()
 
         mfa_used_code_model.objects.create(
             user=user,

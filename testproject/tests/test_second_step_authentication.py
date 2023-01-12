@@ -278,6 +278,8 @@ def test_reuse_same_code_after_validity_period(active_user, settings):
         format="json",
     )
 
+    if response.status_code != HTTP_204_NO_CONTENT:
+        print("282: ", response.data)
     assert response.status_code == HTTP_204_NO_CONTENT
     settings.TRENCH_AUTH["ALLOW_REUSE_CODE"] = True
 
@@ -314,11 +316,12 @@ def test_fail_to_reuse_same_code(active_user, settings):
     )
 
     assert response.status_code == HTTP_400_BAD_REQUEST
+
     settings.TRENCH_AUTH["ALLOW_REUSE_CODE"] = True
 
 
 @pytest.mark.django_db
-def test_reuse_same_code_and_fail_to_reuse_same_code_whend_allow_reuse_code_is_false(active_user, settings):
+def test_reuse_same_code_and_fail_to_reuse_same_code_when_allow_reuse_code_is_false(active_user, settings):
     client = TrenchAPIClient()
     client.authenticate(user=active_user)
 
@@ -345,7 +348,8 @@ def test_reuse_same_code_and_fail_to_reuse_same_code_whend_allow_reuse_code_is_f
         data={"code": code},
         format="json",
     )
-
+    if response.status_code != HTTP_204_NO_CONTENT:
+        print("352: ", response.data)
     assert response.status_code == HTTP_204_NO_CONTENT
 
     settings.TRENCH_AUTH["ALLOW_REUSE_CODE"] = False
@@ -653,6 +657,213 @@ def test_request_code_for_active_mfa_method(active_user_with_email_otp):
     expected_msg = "Email message with MFA code has been sent."
     assert response.status_code == HTTP_200_OK
     assert response.data.get("details") == expected_msg
+
+
+@flaky
+@pytest.mark.django_db
+def test_resend_code_with_interval_set_zero(active_user_with_email_otp):
+    active_user = active_user_with_email_otp
+    client = TrenchAPIClient()
+    response = client._first_factor_request(user=active_user)
+    ephemeral_token = client._extract_ephemeral_token_from_response(response=response)
+
+    mfa_method = active_user_with_email_otp.mfa_methods.first()
+    client.authenticate_multi_factor(
+        mfa_method=mfa_method, user=active_user_with_email_otp
+    )
+    response = client.post(
+        path="/auth/code/resend/",
+        data={"method": "email",
+              "ephemeral_token": ephemeral_token,
+              "email": active_user.email
+              },
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+    response = client.post(
+        path="/auth/code/resend/",
+        data={"method": "email",
+              "ephemeral_token": ephemeral_token,
+              "email": active_user.email
+              },
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+
+@flaky
+@pytest.mark.django_db
+def test_resend_code_with_interval_set_zero_with_no_method_name(active_user_with_email_otp):
+    active_user = active_user_with_email_otp
+    client = TrenchAPIClient()
+    response = client._first_factor_request(user=active_user)
+    ephemeral_token = client._extract_ephemeral_token_from_response(response=response)
+
+    mfa_method = active_user_with_email_otp.mfa_methods.first()
+    client.authenticate_multi_factor(
+        mfa_method=mfa_method, user=active_user_with_email_otp
+    )
+    response = client.post(
+        path="/auth/code/resend/",
+        data={"ephemeral_token": ephemeral_token,
+              "email": active_user.email
+              },
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+    response = client.post(
+        path="/auth/code/resend/",
+        data={"ephemeral_token": ephemeral_token,
+              "email": active_user.email
+              },
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+
+@flaky
+@pytest.mark.django_db
+def test_fail_resend_code_with_interval_set_to_thirty_seconds(active_user_with_email_otp, settings):
+    settings.TRENCH_AUTH["CODE_RESEND_INTERVAL"] = 30
+    active_user = active_user_with_email_otp
+    client = TrenchAPIClient()
+    response = client._first_factor_request(user=active_user)
+    ephemeral_token = client._extract_ephemeral_token_from_response(response=response)
+
+    mfa_method = active_user_with_email_otp.mfa_methods.first()
+    client.authenticate_multi_factor(
+        mfa_method=mfa_method, user=active_user_with_email_otp
+    )
+    response = client.post(
+        path="/auth/code/resend/",
+        data={"method": "email",
+              "ephemeral_token": ephemeral_token,
+              "email": active_user.email
+              },
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+    response = client.post(
+        path="/auth/code/resend/",
+        data={"method": "email",
+              "ephemeral_token": ephemeral_token,
+              "email": active_user.email
+              },
+        format="json",
+    )
+
+    assert response.status_code == HTTP_400_BAD_REQUEST
+    settings.TRENCH_AUTH["CODE_RESEND_INTERVAL"] = 0
+
+
+@flaky
+@pytest.mark.django_db
+def test_fail_resend_code_with_interval_set_to_thirty_seconds_with_method_name(active_user_with_email_otp, settings):
+    settings.TRENCH_AUTH["CODE_RESEND_INTERVAL"] = 30
+    active_user = active_user_with_email_otp
+    client = TrenchAPIClient()
+    response = client._first_factor_request(user=active_user)
+    ephemeral_token = client._extract_ephemeral_token_from_response(response=response)
+
+    mfa_method = active_user_with_email_otp.mfa_methods.first()
+    client.authenticate_multi_factor(
+        mfa_method=mfa_method, user=active_user_with_email_otp
+    )
+    response = client.post(
+        path="/auth/code/resend/",
+        data={"ephemeral_token": ephemeral_token,
+              "email": active_user.email
+              },
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+    response = client.post(
+        path="/auth/code/resend/",
+        data={"ephemeral_token": ephemeral_token,
+              "email": active_user.email
+              },
+        format="json",
+    )
+
+    assert response.status_code == HTTP_400_BAD_REQUEST
+    settings.TRENCH_AUTH["CODE_RESEND_INTERVAL"] = 0
+
+
+@flaky
+@pytest.mark.django_db
+def test_resend_code_with_interval_set_to_five_seconds_when_requesting_after_five_seconds(active_user_with_email_otp, settings):
+    settings.TRENCH_AUTH["CODE_RESEND_INTERVAL"] = 5
+    active_user = active_user_with_email_otp
+    client = TrenchAPIClient()
+    response = client._first_factor_request(user=active_user)
+    ephemeral_token = client._extract_ephemeral_token_from_response(response=response)
+
+    mfa_method = active_user_with_email_otp.mfa_methods.first()
+    client.authenticate_multi_factor(
+        mfa_method=mfa_method, user=active_user_with_email_otp
+    )
+    response = client.post(
+        path="/auth/code/resend/",
+        data={"method": "email",
+              "ephemeral_token": ephemeral_token,
+              "email": active_user.email
+              },
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+    sleep(6)
+
+    response = client.post(
+        path="/auth/code/resend/",
+        data={"method": "email",
+              "ephemeral_token": ephemeral_token,
+              "email": active_user.email
+              },
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+    settings.TRENCH_AUTH["CODE_RESEND_INTERVAL"] = 0
+
+
+@flaky
+@pytest.mark.django_db
+def test_resend_code_with_interval_set_to_five_seconds_when_requesting_after_five_seconds_with_no_method_name(active_user_with_email_otp, settings):
+    settings.TRENCH_AUTH["CODE_RESEND_INTERVAL"] = 5
+    active_user = active_user_with_email_otp
+    client = TrenchAPIClient()
+    response = client._first_factor_request(user=active_user)
+    ephemeral_token = client._extract_ephemeral_token_from_response(response=response)
+
+    mfa_method = active_user_with_email_otp.mfa_methods.first()
+    client.authenticate_multi_factor(
+        mfa_method=mfa_method, user=active_user_with_email_otp
+    )
+    response = client.post(
+        path="/auth/code/resend/",
+        data={"ephemeral_token": ephemeral_token,
+              "email": active_user.email
+              },
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+    sleep(6)
+
+    response = client.post(
+        path="/auth/code/resend/",
+        data={"ephemeral_token": ephemeral_token,
+              "email": active_user.email
+              },
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+
+    settings.TRENCH_AUTH["CODE_RESEND_INTERVAL"] = 0
 
 
 @flaky

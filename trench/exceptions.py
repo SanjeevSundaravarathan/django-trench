@@ -99,6 +99,12 @@ class InvalidCodeError(MFAValidationError):
         super().__init__(detail=_("Invalid or expired code."), code="invalid_code")
 
 
+class CodeReuseError(MFAValidationError):
+    def __init__(self) -> None:
+        super().__init__(detail=_("This is code has been already used. Please wait for sometime to generate new code"),
+                         code="code_reuse_error")
+
+
 class UnauthenticatedError(MFAValidationError):
     def __init__(self) -> None:
         super().__init__(
