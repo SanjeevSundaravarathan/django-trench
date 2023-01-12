@@ -23,10 +23,17 @@ from typing import Any, Iterable
 from trench.exceptions import MFAMethodDoesNotExistError
 import uuid
 
+
 class MFAUserMethodManager(Manager):
     def get_by_name(self, user_id: Any, name: str) -> "MFAMethod":
         try:
             return self.get(user_id=user_id, name=name)
+        except self.model.DoesNotExist:
+            raise MFAMethodDoesNotExistError()
+
+    def get_by_name_with_user_email(self, user_email: str, name: str) -> "MFAMethod":
+        try:
+            return self.get(user__email=user_email, name=name)
         except self.model.DoesNotExist:
             raise MFAMethodDoesNotExistError()
 
@@ -35,6 +42,16 @@ class MFAUserMethodManager(Manager):
             return self.get(user_id=user_id, is_primary=True, is_active=True)
         except self.model.DoesNotExist:
             raise MFAMethodDoesNotExistError()
+
+    def get_primary_active_name_with_user_email(self, user_email: str) -> str:
+        method_name = (
+            self.filter(user__email=user_email, is_primary=True, is_active=True)
+            .values_list("name", flat=True)
+            .first()
+        )
+        if method_name is None:
+            raise MFAMethodDoesNotExistError()
+        return method_name
 
     def get_primary_active_name(self, user_id: Any) -> str:
         method_name = (
@@ -119,6 +136,7 @@ class MFAMethod(Model):
     secret = CharField(_("secret"), max_length=255)
     is_primary = BooleanField(_("is primary"), default=False)
     is_active = BooleanField(_("is active"), default=False)
+    code_last_generated_at = DateTimeField(_("code last generated at"), null=True)
 
     class Meta:
         verbose_name = _("MFA Method")

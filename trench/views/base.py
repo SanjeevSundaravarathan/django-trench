@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractUser
 from django.db.models import QuerySet
 from django.utils.translation import gettext_lazy as _
-
+from django.utils import timezone
 from abc import ABC, abstractmethod
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -42,6 +42,7 @@ from trench.serializers import (
     MFAMethodCodeSerializer,
     MFAMethodDeactivationValidator,
     UserMFAMethodSerializer,
+    MFAMethodResendCodeSerializer
 )
 from trench.settings import SOURCE_FIELD, trench_settings
 from trench.utils import available_method_choices, get_mfa_model, user_token_generator
@@ -231,6 +232,60 @@ class MFAMethodRequestCodeView(APIView):
             return get_mfa_handler(mfa_method=mfa).dispatch_message()
         except MFAValidationError as cause:
             return ErrorResponse(error=cause)
+
+
+class MFAMethodResendCodeView(APIView):
+
+    def post(self, request):
+        serializer = MFAMethodResendCodeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            method = serializer.validated_data.get("method")
+            mfa_model = get_mfa_model()
+            email = serializer.validated_data.get("email")
+            ephemeral_token = serializer.validated_data.get("ephemeral_token")
+
+            if method is None:
+                method = mfa_model.objects.get_primary_active_name_with_user_email(
+                    user_email=email
+                )
+
+            method = mfa_model.objects.get_by_name_with_user_email(
+                user_email=email,
+                name=method
+            )
+
+            user = method.user
+
+            now = timezone.now()
+
+            code_last_generated_at = None
+            if method.code_last_generated_at:
+                code_last_generated_at = method.code_last_generated_at
+
+            code_resend_interval = self._get_code_resend_interval()
+            if code_last_generated_at and (now - code_last_generated_at).total_seconds() < self._get_code_resend_interval():
+                return ErrorResponse(error=Exception(f"Please wait for {code_resend_interval} secs before retrying new code"))
+
+            user = user_token_generator.check_token(user,
+                                                    ephemeral_token)
+
+            if not user:
+                return ErrorResponse(error=Exception("Invalid details"))
+
+            method.code_last_generated_at = now
+            method.save()
+
+            return get_mfa_handler(mfa_method=method).dispatch_message()
+        except MFAValidationError as cause:
+            return ErrorResponse(error=cause)
+
+    def _get_code_resend_interval(self) -> int:
+        user_settings = trench_settings.user_settings
+        if "CODE_RESEND_INTERVAL" not in user_settings:
+            return trench_settings.ALLOW_REUSE_CODE
+
+        return user_settings["CODE_RESEND_INTERVAL"]
 
 
 class MFAPrimaryMethodChangeView(APIView):

@@ -133,6 +133,7 @@ TRENCH_AUTH = {
     "BACKUP_CODES_QUANTITY": 8,
     "DEFAULT_VALIDITY_PERIOD": 600,
     "ALLOW_REUSE_CODE": True,
+    "CODE_RESEND_INTERVAL": 0,  # set 0 to disable it
     "MFA_METHODS": {
         "sms_twilio": {
             "VERBOSE_NAME": "sms",

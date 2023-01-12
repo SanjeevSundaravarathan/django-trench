@@ -152,6 +152,11 @@ class MFAMethodCodeSerializer(RequestBodyValidator):
         return value
 
 
+class MFAMethodResendCodeSerializer(MFAMethodCodeSerializer):
+    email = CharField(max_length=255, required=True)
+    ephemeral_token = CharField(max_length=255, required=True)
+
+
 class LoginSerializer(RequestBodyValidator):
     password = CharField(write_only=True)
 
