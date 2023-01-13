@@ -101,7 +101,7 @@ class InvalidCodeError(MFAValidationError):
 
 class CodeReuseError(MFAValidationError):
     def __init__(self) -> None:
-        super().__init__(detail=_("This is code has been already used. Please wait for sometime to generate new code"),
+        super().__init__(detail=_("This code has already been used. Please wait for a short period of time to generate new backup codes"),
                          code="code_reuse_error")
 
 
