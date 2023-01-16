@@ -296,9 +296,14 @@ class MFAPrimaryMethodChangeView(APIView):
         method_serializer = ChangePrimaryMethodValidator(data=request.data)
         method_serializer.is_valid(raise_exception=True)
 
+        mfa_model = get_mfa_model()
+        mfa_method_name = mfa_model.objects.get_primary_active_name(
+            user_id=request.user.id
+        )
+
         code_serializer = ChangePrimaryMethodCodeValidator(
             user=request.user,
-            mfa_method_name=method_serializer.validated_data["method"],
+            mfa_method_name=mfa_method_name,
             data=request.data,
         )
         code_serializer.is_valid(raise_exception=True)

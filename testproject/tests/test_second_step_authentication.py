@@ -20,7 +20,7 @@ from trench.command.replace_mfa_method_backup_codes import (
     regenerate_backup_codes_for_mfa_method_command,
 )
 from trench.exceptions import MFAMethodDoesNotExistError
-from trench.models import MFAMethod, MFAUsedCode
+from trench.models import MFAMethod, MFAUsedCode, MFABackupCodes
 
 User = get_user_model()
 
@@ -411,7 +411,11 @@ def test_deactivation_of_an_only_primary_mfa_method(active_user_with_email_otp):
         data={"code": handler.create_code()},
         format="json",
     )
+
     assert response.status_code == HTTP_204_NO_CONTENT
+
+    backup_codes_exists = MFABackupCodes.objects.filter(user=active_user_with_email_otp).exists()
+    assert backup_codes_exists is False
 
 
 @flaky
@@ -502,8 +506,9 @@ def test_change_primary_method(active_user_with_many_otp_methods):
     active_user, _ = active_user_with_many_otp_methods
     client = TrenchAPIClient()
     primary_mfa_method = active_user.mfa_methods.filter(is_primary=True).first()
+
     sms_twilio_mfa_method = active_user.mfa_methods.filter(name="sms_twilio").first()
-    handler = get_mfa_handler(mfa_method=sms_twilio_mfa_method)
+    handler = get_mfa_handler(mfa_method=primary_mfa_method)
     client.authenticate_multi_factor(mfa_method=primary_mfa_method, user=active_user)
     response = client.post(
         path="/auth/mfa/change-primary-method/",
@@ -585,6 +590,7 @@ def test_change_primary_method_to_inactive(active_user_with_email_otp):
     primary_mfa_method = active_user_with_email_otp.mfa_methods.filter(
         is_primary=True
     ).first()
+
     handler = get_mfa_handler(mfa_method=primary_mfa_method)
     client.authenticate_multi_factor(
         mfa_method=primary_mfa_method, user=active_user_with_email_otp
@@ -597,8 +603,9 @@ def test_change_primary_method_to_inactive(active_user_with_email_otp):
         },
         format="json",
     )
+
     assert response.status_code == HTTP_400_BAD_REQUEST
-    assert response.data.get("code")[0].code == "mfa_method_does_not_exist"
+    assert response.data["error"] == "Requested MFA method does not exist."
 
 
 @pytest.mark.django_db
