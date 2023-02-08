@@ -4,7 +4,6 @@ from django.db.models import (
     IntegerField,
     BooleanField,
     CharField,
-    CheckConstraint,
     ForeignKey,
     OneToOneField,
     Manager,
@@ -12,7 +11,6 @@ from django.db.models import (
     Q,
     QuerySet,
     TextField,
-    UniqueConstraint,
     DateTimeField
 )
 from django.utils import timezone
@@ -141,17 +139,6 @@ class MFAMethod(Model):
     class Meta:
         verbose_name = _("MFA Method")
         verbose_name_plural = _("MFA Methods")
-        constraints = (
-            UniqueConstraint(
-                condition=Q(is_primary=True),
-                fields=("user",),
-                name="unique_user_is_primary",
-            ),
-            CheckConstraint(
-                check=(Q(is_primary=True) & Q(is_active=True)) | Q(is_primary=False),
-                name="primary_is_active",
-            ),
-        )
 
     objects = MFAUserMethodManager()
 

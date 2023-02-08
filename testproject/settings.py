@@ -28,7 +28,6 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "corsheaders",
-    "drf_spectacular",
     "testapp",
     "trench",
 ]
@@ -98,9 +97,8 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-    ],
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+        'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
+    ]
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "Django Trench example app API",
@@ -115,10 +113,13 @@ SPECTACULAR_SETTINGS = {
 AUTH_USER_MODEL = "testapp.User"
 
 JWT_AUTH = {
-    "JWT_EXPIRATION_DELTA": datetime.timedelta(
-        days=env.int("JWT_EXPIRATION_DELTA_DAYS", default=7)
-    ),
-}
+     "JWT_EXPIRATION_DELTA": datetime.timedelta(
+         days=env.int("JWT_EXPIRATION_DELTA_DAYS", default=7)
+     ),
+     'JWT_AUTH_HEADER_PREFIX': 'Bearer',
+     'JWT_ALLOW_REFRESH': True,
+     'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(weeks=2),
+ }
 
 SIMPLE_JWT = {
     "USER_ID_FIELD": "username",
