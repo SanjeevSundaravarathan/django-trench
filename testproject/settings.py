@@ -96,9 +96,18 @@ STATIC_URL = "/static/"
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
+JWT_AUTH = {
+    "JWT_EXPIRATION_DELTA": datetime.timedelta(
+        days=env.int("JWT_EXPIRATION_DELTA_DAYS", default=7)
+    ),
+    'JWT_AUTH_HEADER_PREFIX': 'Bearer',
+    'JWT_ALLOW_REFRESH': True,
+    'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(weeks=2),
+}
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
@@ -113,12 +122,6 @@ SPECTACULAR_SETTINGS = {
 
 
 AUTH_USER_MODEL = "testapp.User"
-
-JWT_AUTH = {
-    "JWT_EXPIRATION_DELTA": datetime.timedelta(
-        days=env.int("JWT_EXPIRATION_DELTA_DAYS", default=7)
-    ),
-}
 
 SIMPLE_JWT = {
     "USER_ID_FIELD": "username",

@@ -83,6 +83,7 @@ def test_ephemeral_token_verification(active_user_with_email_otp):
         mfa_method=mfa_method, user=active_user_with_email_otp
     )
     assert response.status_code == HTTP_200_OK
+
     assert client.get_username_from_jwt(response=response) == getattr(
         active_user_with_email_otp,
         User.USERNAME_FIELD,
@@ -141,11 +142,12 @@ def test_second_method_activation(active_user_with_email_otp):
     )
     assert len(active_user_with_email_otp.mfa_methods.all()) == 1
     try:
-        client.post(
+        response = client.post(
             path="/auth/sms_twilio/activate/",
             data={"phone_number": "555-555-555"},
             format="json",
         )
+
     except TwilioException:
         # Twilio will raise exception because the secret key used is invalid
         pass
@@ -165,6 +167,7 @@ def test_second_method_activation_already_active(active_user_with_email_otp):
         path="/auth/email/activate/",
         format="json",
     )
+
     assert response.status_code == HTTP_400_BAD_REQUEST
     assert response.data.get("error") == "MFA method already active."
 
@@ -220,13 +223,14 @@ def test_activation_otp_confirm_wrong(active_user):
 def test_confirm_activation_otp(active_user):
     client = TrenchAPIClient()
     client.authenticate(user=active_user)
-
     # create new MFA method
     client.post(
         path="/auth/email/activate/",
         format="json",
     )
+
     mfa_method = active_user.mfa_methods.first()
+
     handler = get_mfa_handler(mfa_method=mfa_method)
 
     # activate the newly created MFA method
