@@ -14,7 +14,7 @@ class AuthenticateUserCommand:
     def execute(request: Request, username: str, password: str) -> User:
         user = authenticate(
             request=request,
-            username=username,
+            username=username.lower(),
             password=password,
         )
         if user is None:
