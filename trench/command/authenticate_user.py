@@ -12,9 +12,15 @@ User: AbstractUser = get_user_model()
 class AuthenticateUserCommand:
     @staticmethod
     def execute(request: Request, username: str, password: str) -> User:
+        try:
+            findUser = User.objects.get(email__iexact=username)
+            caseSensitiveUsername = findUser.email
+        except User.DoesNotExist:
+            raise UnauthenticatedError()
+
         user = authenticate(
             request=request,
-            username=username.lower(),
+            username=caseSensitiveUsername,
             password=password,
         )
         if user is None:
